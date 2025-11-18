@@ -1,2 +1,2 @@
 # Agent-Money-Mind
-Agent Money Mind is a mentor for teenagers for financial literacy 
+Agent Money Mind helps teenagers understand money by turning their social-media-style questions into personalized financial lessons.
