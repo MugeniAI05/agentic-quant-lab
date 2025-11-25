@@ -1,175 +1,75 @@
 # Agentic Quant Research Lab
 
-![Project Thumbnail](thumbnail.jpg)
+## 1. Problem Statement: The "Analyst's Bottleneck"
+Quantitative research is traditionally a disjointed process. Traders must bridge the gap between **hard numerical data** (price action, volatility) and **soft qualitative data** (news sentiment, macro narratives).
+* **The Pain Point:** Manually fetching OHLCV data, cleaning it, reading hundreds of headlines, and running backtests across multiple tickers is slow and error-prone.
+* **The Scaling Issue:** A human analyst cannot monitor hundreds of tickers simultaneously for specific signal divergences (e.g., "Price is rising despite negative news").
+* **The Goal:** Automate the "grunt work" of data ingestion, feature engineering, and initial signal detection so humans can focus on high-level strategy.
 
-### Problem Statement
+  ![Project Thumbnail](thumbnail.jpg)
 
-Quantitative analysts and retail traders lose valuable opportunities because comprehensive market research is slow, disjointed, and prone to human error.
-
-The core problems:
-- **Data Overload:** Bridging the gap between hard numerical data (price action, volatility) and soft qualitative data (news sentiment) requires switching between multiple disjointed tools.
-- **Manual Labor:** Fetching OHLCV data, calculating technical indicators, and reading hundreds of headlines for every ticker is an unscalable drain on time.
-- **Missing Signals:** Humans often miss sophisticated "divergence" signals—such as a stock price rising despite negative news ("climbing a wall of worry")—because they cannot synthesize multimodal data fast enough.
-- **Backtesting Bottlenecks:** Validating a trade idea requires coding a backtest from scratch every time, which discourages rigorous testing.
-
-The Agentic Quant Research Lab is designed to automate the "grunt work" of research: it autonomously ingests data, engineers features, detects signals, and validates them with math, allowing the human trader to focus on high-level strategy.
-
----
-
-### Why agents are the right solution
-
-This problem is naturally an assembly line of expert tasks:
-- **ETL:** Extracting and cleaning real-time market data and news.
-- **Analysis:** Synthesizing conflicting data points (e.g., "Technicals are good, Sentiment is bad").
-- **Reporting:** Drafting a professional, evidence-based research note.
-
-Agents fit because:
-
-**Specialization:**
-- A **Data Agent** is optimized for reliable API interaction and state management.
-- A **Signal Agent** is optimized for pattern recognition and hypothesis generation.
-- A **Reporting Agent** is optimized for mathematical validation and clear communication.
-
-**Workflow & Safety:**
-- **Sequential workflow:** Using a `SequentialAgent` guarantees data is fetched and cleaned *before* analysis begins, preventing hallucinations based on missing data.
-- **Tool use:** Agents reliably call tools like `fetch_market_data` and `local_backtest` instead of trying to do math or quote prices from their training data.
-- **Shared State:** Instead of passing massive dataframes through the LLM context window (which is expensive and error-prone), agents read/write to a shared `ToolContext` state.
-- **Safety:** A custom guardrail plugin ensures the agent analyzes data but never gives reckless financial advice (e.g., "Go all in"), protecting the user and the platform.
+## 2. Solution: The Agentic Workflow
+The **Agentic Quant Research Lab** is an autonomous system that executes the full lifecycle of preliminary market research.
+* **Multi-Modal Ingestion:** It gathers real-time market prices and breaking news simultaneously.
+* **Cognitive Synthesis:** It uses LLM reasoning to cross-reference technical indicators (Math) with news sentiment (Language).
+* **Validation:** It validates hypotheses through vector-based backtesting, ensuring ideas are mathematically sound before reporting.
+* **Output:** It generates a professional, structured Research Note, ready for human review.
 
 ---
 
-### What I created — overall architecture
+## 3. System Architecture
+This project moves beyond simple "chatbot" architectures by implementing a **Sequential Multi-Agent System**. It functions as an assembly line where specialized agents hand off tasks to one another.
 
-**Project Name:** Agentic Quant Research Lab
+### The Orchestrator: `AgenticQuantLab_Workflow`
+* **Pattern:** `SequentialAgent`
+* **Model:** `gemini-2.5-flash` (Chosen for high throughput and low latency).
+* **State Management:** Instead of passing massive data blobs through the LLM context window (which causes hallucinations and high costs), this system uses a **Shared Session State** (`ToolContext`). Agents read/write heavy data (DataFrames) to the state, passing only lightweight status messages to one another.
 
-**High-level architecture:** Sequential Multi-Agent System with Shared State
+### The Specialist Agents
 
-#### Input
-User prompt: "Run a research cycle on NVDA."
+#### Data Engineer: `Quant_Data_Agent`
+* **Role:** Extract-Transform-Load (ETL).
+* **Key Innovation:** Implements **Robust Tooling**.
+    * *Price Data:* Fetches via `yfinance`.
+    * *News Data:* Fetches via `duckduckgo_search` with a **Fallback Mechanism**. If live search is rate-limited (common in cloud environments), it degrades gracefully to cached data rather than crashing the workflow.
 
-#### Agent A – “The Data Engineer”
-- **Type:** Agent (`Quant_Data_Agent`)
+#### Signal Analyst: `Quant_Signal_Research_Agent`
+* **Role:** Pattern Recognition & Hypothesis Generation.
+* **Logic:** It synthesizes multi-modal inputs. For example, if Momentum is Positive but News is Negative, it identifies a **"Climbing a Wall of Worry"** scenario—a sophisticated market signal that simple regression models miss.
 
-**Responsibilities:**
-- Call `fetch_market_data(ticker)` to retrieve historical pricing via `yfinance` and save it to the shared state.
-- Call `fetch_news_sentiment(ticker)` via `duckduckgo_search` to get real-time headlines (with a robust fallback mechanism if the API is blocked).
-- Call `compute_simple_factors` to calculate Momentum and Volatility metrics.
-- **Output:** A JSON summary of available data (not the raw data itself).
-
-#### Memory Service – “The Shared State”
-- **Implementation:** `ToolContext` state dictionary + `InMemoryMemoryService`.
-
-**Stores:**
-- Heavy DataFrames (OHLCV data).
-- Raw news lists.
-- Computed factor arrays.
-
-Accessed via tools to prevent context window bloat.
-
-#### Agent B – “The Signal Analyst”
-- **Type:** Agent (`Quant_Signal_Research_Agent`)
-
-**Responsibilities:**
-- Read the data summary from Agent A.
-- Analyze the sentiment of the fetched headlines.
-- Cross-reference sentiment with technical factors.
-- **Output:** A structured `signal_spec` containing a hypothesis (e.g., "Bullish Divergence detected").
-
-#### Agent C – “The Reporter”
-- **Type:** Agent (`Quant_Reporting_Agent`)
-
-**Responsibilities:**
-- Read the `signal_spec`.
-- Call `local_backtest` to mathematically validate the hypothesis against the historical data stored in state.
-- Draft a formal Research Note:
-  - Cites specific metrics (Sharpe Ratio, CAGR).
-  - Summarizes news sentiment.
-  - Provides a clear conclusion.
-- **Output:** Final Markdown report.
-
-#### Orchestrator – “AgenticQuantLab_Workflow”
-- **Type:** `SequentialAgent`
-- `sub_agents = [data_agent, signal_agent, report_agent]`
-
-**Enforces the pipeline:**
-Ingest Data → Detect Signal → Validate & Report.
-
-#### Safety Plugin – “NoTradeAdviceGuardrail”
-- **Type:** `BasePlugin`
-- **Hook:** `before_agent_callback`
-
-**Behavior:**
-- Checks user input for high-risk financial keywords (e.g., "buy", "sell", "short", "go all in").
-- If triggered, logs a warning and can block the request to ensure Responsible AI compliance.
+#### Reporter: `Quant_Reporting_Agent`
+* **Role:** Validation & Communication.
+* **Tools:** Uses `local_backtest` to calculate Sharpe Ratio, CAGR, and Max Drawdown.
+* **Output:** Synthesizes technicals, sentiment, and backtest metrics into a formatted markdown report.
 
 ---
 
-### Demo — how the solution works from a user’s perspective
+## 4. Key Engineering Challenges & Solutions
 
-#### Request step
-The user types: "Run a research cycle on NVDA (Nvidia). Find a signal and write a report."
+### Challenge A: Context Window Bloat
+* **Problem:** Passing 250 days of daily price data through the LLM context window is expensive and confusing for the model.
+* **Solution:** Implemented **State-Based Tooling**. The `fetch_market_data` tool saves the DataFrame directly to `context.state['market_data']`. The downstream `compute_simple_factors` tool reads directly from that state. The LLM never sees the raw numbers, only the summary statistics.
 
-#### Data phase
-The Data Agent:
-- Connects to Yahoo Finance to pull the last 252 days of price data.
-- Scrapes DuckDuckGo for the latest news headlines.
-- Computes technical factors (e.g., 5-day Momentum).
-- Saves all heavy data to the session state hidden from the LLM's context window.
+### Challenge B: API Reliability
+* **Problem:** External scrapers (like `yfinance` news) often break or get rate-limited in Colab environments.
+* **Solution:** Engineered a **Circuit Breaker** pattern. If the primary news source returns an empty list or error, the tool catches the exception and provides a "No News" status or fallback data, allowing the agent to continue its analysis (noting the limitation in the final report) rather than crashing.
 
-#### Analysis phase
-The Signal Agent:
-- Notices that while the news is negative (e.g., "Competition fears"), the price momentum is positive.
-- Formulates a "Climbing a Wall of Worry" hypothesis: The stock is resilient despite bad news.
-
-#### Reporting phase
-The Reporting Agent:
-- Runs a vector backtest on the chosen momentum factor.
-- Determines the strategy yielded a **Sharpe Ratio of 1.89**.
-- Generates the final note:
-> "**Conclusion:** The 5-day momentum factor demonstrates a positive historical performance with a favorable Sharpe Ratio. The absence of price drops despite negative news sentiment suggests strong underlying demand."
-
-#### Safety checks
-If the user asks, "Should I bet my life savings on this?", the `NoTradeAdviceGuardrail` intercepts the request and prevents the agent from responding.
+### Challenge C: Safety & Liability
+* **Problem:** An autonomous financial agent poses a risk of generating harmful financial advice.
+* **Solution:** Built a custom **ADK Plugin** (`NoTradeAdviceGuardrail`). This intercepts user messages *before* they reach the agent. If a user asks to "Go all in" or requests specific "Buy/Sell" advice, the guardrail logs a warning and can be configured to block the request, ensuring **Responsible AI** compliance.
 
 ---
 
-### The Build — how I created it, tools & technologies used
+## 5. Observability & Metrics
+The system is fully instrumented using the ADK's `LoggingPlugin`.
+* **Traceability:** Every step of the chain (Data -> Signal -> Report) is logged with a unique Invocation ID.
+* **Transparency:** Tool inputs and outputs are visible in the logs, allowing us to verify *why* the agent chose a specific factor.
+* **Audit Trail:** The final session state is persisted to a Memory Service, creating an audit trail of all research conducted.
 
-#### Core stack
-
-##### Agent framework
-Google Agent Development Kit (ADK):
-- `SequentialAgent` for deterministic orchestration.
-- `ToolContext` for managing shared state between agents.
-- `BasePlugin` for safety guardrails.
-- `LoggingPlugin` for observability and debugging.
-
-##### Model
-Gemini 2.5 Flash (via `Gemini(model="gemini-2.5-flash")`):
-- Chosen for high throughput and low latency, essential for multi-step reasoning chains.
-
-##### Custom tools (Function Tool pattern)
-- `fetch_market_data`
-  - Integrates `yfinance` to pull real-world OHLCV data.
-  - Saves data to `context.state` to avoid token limits.
-- `fetch_news_sentiment`
-  - Integrates `duckduckgo_search`.
-  - **Innovation:** Includes a "Circuit Breaker" fallback. If the live search is rate-limited, it returns cached/fallback data so the pipeline doesn't crash.
-- `local_backtest`
-  - Uses `numpy` and `pandas` to perform vector-based simulation of trading strategies.
-
-#### Agents
-- `data_agent`: ETL specialist.
-- `signal_agent`: Qualitative/Quantitative synthesis expert.
-- `report_agent`: Validation and communication expert.
-
-#### Orchestration
-- `quant_workflow = SequentialAgent(...)`
-- Ensures that analysis never happens before data is fully prepped and cleaned.
 
 ---
 
-### If I had more time, this is what I’d do
+## 6. Future Roadmap
 
 If I extend the Agentic Quant Research Lab beyond this blueprint, I’d:
 
