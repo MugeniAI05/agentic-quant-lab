@@ -12,7 +12,7 @@ The core problems:
 
 The Agentic Quant Research Lab is designed to automate the "grunt work" of research: it autonomously ingests data, engineers features, detects signals, and validates them with math, allowing the human trader to focus on high-level strategy.
 
-![Agentic Quant Lab Thumbnail](unnamed.png)
+![agentic-quant-lab](thumbnail.png)
 
 ---
 
