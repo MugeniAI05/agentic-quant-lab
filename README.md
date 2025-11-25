@@ -1,5 +1,7 @@
 # Agentic Quant Research Lab
 
+![Project Thumbnail](thumbnail.jpg)
+
 ### Problem Statement
 
 Quantitative analysts and retail traders lose valuable opportunities because comprehensive market research is slow, disjointed, and prone to human error.
